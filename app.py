@@ -1,142 +1,107 @@
-
 import streamlit as st
-import google.generativeai as genai
-import datetime
 import pandas as pd
+import requests
+import google.generativeai as genai
 import json
 import re
 
-st.set_page_config(page_title="Processador de Notícias Jurídicas com IA", layout="wide")
+st.set_page_config(page_title="Radar Jurídico IA", layout="wide")
 
-st.title("⚖️ Processador de Notícias Jurídicas com IA")
+st.title("⚖️ Radar de Notícias Jurídicas sobre IA")
 st.subheader("Powered by Google Gemini + Advoco Brasil")
 
-# --- Configuração da API ---
-api_key = st.text_input("🔑 Insira sua API Key do Google Gemini:", type="password")
+# 🔑 Chaves
+news_api_key = st.secrets["newsapi_key"] if "newsapi_key" in st.secrets else st.text_input("🔑 API Key do NewsAPI:", type="password")
+gemini_api_key = st.secrets["gemini_key"] if "gemini_key" in st.secrets else st.text_input("🔑 API Key do Google Gemini:", type="password")
 
-if api_key:
+# 🔗 Configura Gemini
+if gemini_api_key:
     try:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=gemini_api_key)
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        st.success("✅ API configurada com sucesso!")
+        st.success("✅ API Gemini configurada!")
     except Exception as e:
-        st.error(f"❌ Erro ao configurar API: {e}")
+        st.error(f"❌ Erro na configuração do Gemini: {e}")
         st.stop()
-else:
-    st.warning("⚠️ Insira sua API Key para continuar.")
-    st.stop()
 
-# --- Entrada de Dados ---
-st.markdown("### 📰 Simule ou cole suas notícias abaixo:")
+# 🔍 Função busca na NewsAPI
+def buscar_noticias_newsapi(api_key):
+    url = "https://newsapi.org/v2/everything"
+    params = {
+        'q': 'inteligência artificial AND (advocacia OR direito OR tribunais OR CNJ OR OAB)',
+        'from': pd.Timestamp.now() - pd.Timedelta(days=10),
+        'sortBy': 'relevancy',
+        'language': 'pt',
+        'pageSize': 10,
+        'apiKey': api_key
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    if data.get("status") != "ok":
+        raise Exception(data.get("message", "Erro na NewsAPI"))
+    return data.get("articles", [])
 
-with st.expander("🔧 Usar notícias simuladas"):
-    if st.button("➡️ Carregar Notícias Simuladas"):
-        noticias = [
-            {
-                "data_publicacao": (datetime.date.today() - datetime.timedelta(days=1)).strftime("%d/%m/%Y"),
-                "titulo": "IA Generativa Revoluciona Análise de Contratos em Escritórios Brasileiros",
-                "fonte": "Portal Jurídico Tech",
-                "link": "https://example.com/noticia1",
-                "texto_completo": "Grandes escritórios estão adotando IA Generativa para análise de contratos..."
-            },
-            {
-                "data_publicacao": (datetime.date.today() - datetime.timedelta(days=3)).strftime("%d/%m/%Y"),
-                "titulo": "CNJ Discute Nova Resolução sobre IA no Judiciário",
-                "fonte": "Notícias do Judiciário",
-                "link": "https://example.com/noticia2",
-                "texto_completo": "O CNJ debate resolução para IA em apoio a decisões judiciais..."
-            }
-        ]
-    else:
-        noticias = []
-
-st.markdown("Ou insira manualmente:")
-
-with st.form(key="formulario"):
-    titulo = st.text_input("Título da Notícia")
-    fonte = st.text_input("Fonte")
-    link = st.text_input("Link")
-    texto = st.text_area("Texto Completo")
-    data = st.date_input("Data de Publicação", datetime.date.today())
-
-    enviar = st.form_submit_button("Adicionar Notícia")
-
-    if enviar and titulo and texto:
-        nova = {
-            "data_publicacao": data.strftime("%d/%m/%Y"),
-            "titulo": titulo,
-            "fonte": fonte,
-            "link": link,
-            "texto_completo": texto
-        }
-        noticias.append(nova)
-
-# --- Processamento ---
-def processar_noticia(noticia):
+# 🧠 Função processa com Gemini
+def processar_com_gemini(artigo):
     prompt = f"""
-    Analise a seguinte notícia do contexto jurídico brasileiro:
+Você é um analista jurídico. Classifique e resuma a seguinte notícia do contexto jurídico brasileiro sobre inteligência artificial:
 
-    Título: {noticia['titulo']}
-    Fonte: {noticia['fonte']}
-    Texto Completo: {noticia['texto_completo']}
+Título: {artigo['title']}
+Fonte: {artigo['source']['name']}
+Descrição: {artigo['description']}
+Link: {artigo['url']}
 
-    Com base nos critérios abaixo, forneça:
-    1. Um resumo conciso da notícia em no máximo 2 linhas.
-    2. A categoria principal da notícia, escolhendo UMA das seguintes opções:
-        - Implementação de IA em escritórios de advocacia e tribunais brasileiros
-        - Novas legislações e regulamentações sobre IA no direito brasileiro
-        - Casos de uso bem-sucedidos de IA por advogados no Brasil
-        - Controvérsias ou uso inadequado de IA por profissionais jurídicos brasileiros
-        - Desafios éticos da IA na prática jurídica no contexto do Brasil
-        - Tendências emergentes que advogados brasileiros precisam conhecer
+Siga estes critérios:
+- Categorize a notícia em uma das opções: 
+  1. Implementação de IA em escritórios de advocacia e tribunais brasileiros
+  2. Novas legislações e regulamentações sobre IA no direito brasileiro
+  3. Casos de uso bem-sucedidos de IA por advogados no Brasil
+  4. Controvérsias ou uso inadequado de IA por profissionais jurídicos brasileiros
+  5. Desafios éticos da IA na prática jurídica no contexto do Brasil
 
-    Formato da Resposta (JSON):
-    {{
-      "resumo": "Seu resumo aqui...",
-      "categoria": "Categoria escolhida aqui..."
-    }}
-    """
+Devolva como JSON:
+{{
+  "data": "{pd.Timestamp(artigo['publishedAt']).strftime('%d/%m/%Y')}",
+  "titulo": "{artigo['title']}",
+  "fonte": "{artigo['source']['name']}",
+  "link": "{artigo['url']}",
+  "categoria": "categoria aqui",
+  "resumo": "resumo aqui"
+}}
+"""
     try:
         response = model.generate_content(prompt)
         result = response.text.strip()
         result = re.sub(r"^```json", "", result)
         result = re.sub(r"```$", "", result)
-        data = json.loads(result)
-        return {
-            "Data": noticia['data_publicacao'],
-            "Título": noticia['titulo'],
-            "Fonte": noticia['fonte'],
-            "Link": noticia['link'],
-            "Categoria": data.get('categoria', 'Erro'),
-            "Resumo": data.get('resumo', 'Erro')
-        }
-    except:
-        return {
-            "Data": noticia['data_publicacao'],
-            "Título": noticia['titulo'],
-            "Fonte": noticia['fonte'],
-            "Link": noticia['link'],
-            "Categoria": "Erro",
-            "Resumo": "Erro ao processar"
-        }
+        return json.loads(result)
+    except Exception as e:
+        st.error(f"❌ Erro no processamento Gemini: {e}")
+        return None
 
-# --- Execução ---
-if noticias:
-    st.info(f"🔍 Processando {len(noticias)} notícias...")
+# 🚀 Execução
+if st.button("🔎 Buscar Notícias Reais"):
+    with st.spinner("Consultando APIs..."):
+        try:
+            artigos = buscar_noticias_newsapi(news_api_key)
+            resultados = []
+            for artigo in artigos:
+                processado = processar_com_gemini(artigo)
+                if processado:
+                    resultados.append(processado)
 
-    resultados = []
-    for noticia in noticias:
-        resultados.append(processar_noticia(noticia))
+            if resultados:
+                df = pd.DataFrame(resultados)
+                st.dataframe(df, use_container_width=True)
 
-    df = pd.DataFrame(resultados)
-    st.dataframe(df, use_container_width=True)
+                st.download_button(
+                    label="💾 Baixar CSV",
+                    data=df.to_csv(index=False).encode('utf-8'),
+                    file_name='noticias_juridicas_ia.csv',
+                    mime='text/csv'
+                )
+            else:
+                st.warning("Nenhuma notícia relevante encontrada.")
 
-    st.download_button(
-        label="💾 Baixar resultados em CSV",
-        data=df.to_csv(index=False).encode('utf-8'),
-        file_name='noticias_processadas.csv',
-        mime='text/csv'
-    )
-
-else:
-    st.warning("⚠️ Nenhuma notícia para processar.")
+        except Exception as e:
+            st.error(f"❌ Erro: {e}")
