@@ -1,9 +1,11 @@
+
 import streamlit as st
 import pandas as pd
 import requests
 import google.generativeai as genai
 import json
 import re
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Radar Jurídico IA", layout="wide")
 
@@ -43,29 +45,36 @@ def buscar_noticias_newsapi():
 # 🧠 Função processa com Gemini
 def processar_com_gemini(artigo):
     prompt = f"""
-Você é um analista jurídico. Classifique e resuma a seguinte notícia do contexto jurídico brasileiro sobre inteligência artificial:
+Você é um especialista em direito e tecnologia.
 
-Título: {artigo['title']}
-Fonte: {artigo['source']['name']}
-Descrição: {artigo.get('description', '')}
-Link: {artigo['url']}
+Sua tarefa é classificar, resumir e categorizar a seguinte notícia, sempre avaliando se ela está relacionada diretamente ao uso da Inteligência Artificial no contexto jurídico brasileiro.
 
-Siga estes critérios:
-- Categorize a notícia em uma das opções:
-  1. Implementação de IA em escritórios de advocacia e tribunais brasileiros
-  2. Novas legislações e regulamentações sobre IA no direito brasileiro
-  3. Casos de uso bem-sucedidos de IA por advogados no Brasil
-  4. Controvérsias ou uso inadequado de IA por profissionais jurídicos brasileiros
-  5. Desafios éticos da IA na prática jurídica no contexto do Brasil
+⚠️ Se a notícia NÃO for sobre IA aplicada ao direito, ao judiciário, à advocacia, a tribunais ou à regulamentação no Brasil, descarte.
 
-Devolva como JSON:
+Se for relevante, siga estes critérios:
+
+1️⃣ Categorize a notícia em UMA das opções:
+- Implementação de IA em escritórios de advocacia ou tribunais brasileiros
+- Novas legislações e regulamentações sobre IA no direito brasileiro
+- Casos de uso bem-sucedidos de IA por advogados no Brasil
+- Controvérsias ou uso inadequado de IA no ambiente jurídico brasileiro
+- Desafios éticos da IA na prática jurídica no Brasil
+
+2️⃣ Crie um resumo objetivo, de até 2 linhas, claro e informativo.
+
+3️⃣ Entregue o resultado no formato JSON:
 {{
   "data": "{pd.Timestamp(artigo['publishedAt']).strftime('%d/%m/%Y')}",
   "titulo": "{artigo['title']}",
   "fonte": "{artigo['source']['name']}",
   "link": "{artigo['url']}",
-  "categoria": "categoria aqui",
-  "resumo": "resumo aqui"
+  "categoria": "Categoria",
+  "resumo": "Resumo objetivo"
+}}
+
+⚠️ Se a notícia não for sobre IA no contexto jurídico brasileiro, responda apenas:
+{{
+  "descartar": "Notícia irrelevante para IA no direito"
 }}
 """
     try:
@@ -73,10 +82,35 @@ Devolva como JSON:
         result = response.text.strip()
         result = re.sub(r"^```json", "", result)
         result = re.sub(r"```$", "", result)
-        return json.loads(result)
+        data = json.loads(result)
+        if "descartar" in data:
+            return None
+        return data
     except Exception as e:
         st.error(f"❌ Erro no processamento Gemini: {e}")
         return None
+
+# 🎨 Função gerar HTML estilizado
+def gerar_html_noticias(lista_noticias):
+    html = """
+    <div style='font-family: Arial, sans-serif; max-width: 1000px; margin: auto;'>
+    """
+    for noticia in lista_noticias:
+        html += f"""
+        <div style='border:1px solid #ddd; border-radius:10px; padding:20px; margin-bottom:15px; box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+          <div style='font-size:14px; color:#666;'>🗓️ {noticia['data']} | <strong>{noticia['fonte']}</strong> | <span style='color:#0066cc;'>{noticia['categoria']}</span></div>
+          <h3 style='margin-top:5px; margin-bottom:10px;'>
+            <a href='{noticia['link']}' target='_blank' style='text-decoration:none; color:#003366;'>
+              {noticia['titulo']}
+            </a>
+          </h3>
+          <p style='font-size:15px; color:#333;'>
+            {noticia['resumo']}
+          </p>
+        </div>
+        """
+    html += "</div>"
+    return html
 
 # 🚀 Execução
 if st.button("🔎 Buscar Notícias Reais"):
@@ -90,15 +124,8 @@ if st.button("🔎 Buscar Notícias Reais"):
                     resultados.append(processado)
 
             if resultados:
-                df = pd.DataFrame(resultados)
-                st.dataframe(df, use_container_width=True)
-
-                st.download_button(
-                    label="💾 Baixar CSV",
-                    data=df.to_csv(index=False).encode('utf-8'),
-                    file_name='noticias_juridicas_ia.csv',
-                    mime='text/csv'
-                )
+                html_resultado = gerar_html_noticias(resultados)
+                components.html(html_resultado, height=700 + len(resultados) * 150, scrolling=True)
             else:
                 st.warning("Nenhuma notícia relevante encontrada.")
 
