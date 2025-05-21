@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Radar Jurídico IA", layout="wide")
 
 st.title("Radar de Notícias Jurídicas sobre IA")
-st.subheader("Powered by Google Gemini + Advoco Brasil")
+st.subheader("Powered by Advoco Brasil")
 
 # 🔑 Carrega chaves dos secrets
 NEWS_API_KEY = st.secrets["newsapi_key"]
