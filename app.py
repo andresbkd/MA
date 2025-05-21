@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Radar Jurídico IA", layout="wide")
 
-st.title("⚖️ Radar de Notícias Jurídicas sobre IA")
+st.title("Radar de Notícias Jurídicas sobre IA")
 st.subheader("Powered by Google Gemini + Advoco Brasil")
 
 # 🔑 Carrega chaves dos secrets
@@ -19,7 +19,7 @@ GEMINI_API_KEY = st.secrets["gemini_key"]
 # 🔗 Configura Google Gemini
 try:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
     st.success("✅ API Gemini configurada com sucesso!")
 except Exception as e:
     st.error(f"❌ Erro na configuração do Gemini: {e}")
