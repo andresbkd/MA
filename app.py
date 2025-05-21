@@ -23,7 +23,7 @@ NEWS_API_KEY = os.getenv("newsapi_key")
 GEMINI_API_KEY = os.getenv("gemini_key")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
 
 # 🔍 Buscar na NewsAPI
 def buscar_noticias_newsapi():
